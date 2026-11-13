@@ -1,0 +1,6 @@
+# Python >= 3.10（代码用了 X | None 的类型写法）
+httpx>=0.27
+jsonschema>=4.21
+fastapi>=0.110
+uvicorn>=0.27
+pytest>=8.0

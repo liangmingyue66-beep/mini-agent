@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MiniAgent</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --line: #e6e7eb;
+    --text: #191a1f;
+    --muted: #6b7280;
+    --brand: #2563eb;
+    --brand-soft: #eef3ff;
+    --danger: #b42318;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app { display: flex; height: 100vh; }
+
+  /* ---------------- 侧栏 ---------------- */
+  .sidebar {
+    width: 264px;
+    flex: 0 0 264px;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    padding: 16px 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 2px 6px 14px; }
+  .logo {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: var(--brand); color: #fff;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 15px;
+  }
+  .brand .name { font-weight: 650; letter-spacing: .2px; }
+  .brand .sub { font-size: 11px; color: var(--muted); margin-top: -2px; }
+  .new {
+    width: 100%; padding: 9px 12px; margin-bottom: 12px;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel); color: var(--text);
+    font: inherit; font-weight: 550; cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .new:hover { background: var(--brand-soft); border-color: #c9d8ff; }
+  .list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+  .item {
+    padding: 9px 10px; border-radius: 9px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .item:hover { background: #f4f5f7; }
+  .item.active { background: var(--brand-soft); border-color: #d5e2ff; }
+  .item .t {
+    font-size: 13px; font-weight: 550;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .item .s { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .item .s.busy { color: var(--brand); }
+  .side-foot {
+    padding: 12px 6px 2px; border-top: 1px solid var(--line);
+    font-size: 11px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* ---------------- 主区 ---------------- */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .top {
+    height: 54px; flex: 0 0 54px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 22px; border-bottom: 1px solid var(--line);
+    background: rgba(255,255,255,.8); backdrop-filter: blur(6px);
+  }
+  .top .title { font-weight: 600; }
+  .top .meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .messages {
+    flex: 1; overflow-y: auto;
+    padding: 26px 22px 130px;
+    scroll-behavior: smooth;
+  }
+  .thread { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+
+  .row { display: flex; }
+  .row.user { justify-content: flex-end; }
+  .bubble {
+    max-width: 86%;
+    border-radius: 14px;
+    padding: 11px 14px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .user .bubble { background: var(--brand); color: #fff; border-bottom-right-radius: 4px; }
+  .bot .bubble {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-bottom-left-radius: 4px;
+    max-width: 92%;
+  }
+  .bot .bubble > .answer { white-space: pre-wrap; }
+  .bot .bubble > .answer:empty { display: none; }
+
+  /* 思考过程 */
+  details.thought {
+    margin-bottom: 8px; border-left: 2px solid #d9dbe2;
+    padding-left: 10px;
+  }
+  details.thought > summary {
+    cursor: pointer; color: var(--muted); font-size: 12px;
+    list-style: none; user-select: none;
+  }
+  details.thought > summary::-webkit-details-marker { display: none; }
+  details.thought > summary::before { content: "▸ "; }
+  details.thought[open] > summary::before { content: "▾ "; }
+  details.thought .tbody {
+    margin-top: 6px; color: #4b5563; font-size: 13px;
+    border-left: 2px solid #eef0f4; padding-left: 8px;
+    white-space: pre-wrap;
+  }
+
+  /* 工具卡片 */
+  .tools { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+  details.tool {
+    border: 1px solid var(--line); border-radius: 9px;
+    background: #fbfbfc; overflow: hidden;
+  }
+  details.tool > summary {
+    cursor: pointer; list-style: none;
+    padding: 7px 26px 7px 10px; font-size: 12px; font-family: var(--mono);
+    display: flex; align-items: center; gap: 8px;
+    position: relative;
+  }
+  details.tool > summary::-webkit-details-marker { display: none; }
+  details.tool > summary::after {
+    content: ""; position: absolute; right: 12px; top: 50%;
+    width: 5px; height: 5px;
+    border-right: 1.5px solid #9ca3af; border-bottom: 1.5px solid #9ca3af;
+    transform: translateY(-70%) rotate(45deg);
+    transition: transform .15s;
+  }
+  details.tool[open] > summary::after { transform: translateY(-30%) rotate(-135deg); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: #16a34a; flex: 0 0 6px; }
+  .dot.err { background: var(--danger); }
+  .tool .tname { font-weight: 600; color: #111827; }
+  .tool .targs {
+    color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 320px;
+  }
+  .tool .tms { margin-left: auto; color: #9ca3af; flex: 0 0 auto; }
+  details.tool pre {
+    margin: 0; padding: 9px 10px;
+    border-top: 1px solid var(--line); background: #fff;
+    font-family: var(--mono); font-size: 12px; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 220px; overflow: auto;
+  }
+  details.tool.err summary { color: var(--danger); }
+
+  .stat {
+    margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--line);
+    font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+
+  /* 加载态 */
+  .loading { display: inline-flex; gap: 4px; align-items: center; height: 20px; }
+  .loading i {
+    width: 5px; height: 5px; border-radius: 50%; background: #9ca3af;
+    animation: blink 1.2s infinite ease-in-out;
+  }
+  .loading i:nth-child(2) { animation-delay: .18s; }
+  .loading i:nth-child(3) { animation-delay: .36s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+
+  /* 空状态 */
+  .empty { max-width: 520px; margin: 12vh auto 0; text-align: center; color: var(--muted); }
+  .empty h1 { font-size: 20px; color: var(--text); font-weight: 650; margin: 0 0 6px; }
+  .empty p { margin: 0 0 18px; font-size: 13px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .chip {
+    padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--panel); font-size: 12px; cursor: pointer; color: #374151;
+  }
+  .chip:hover { border-color: #c9d8ff; background: var(--brand-soft); }
+
+  /* 输入框 */
+  .composer {
+    position: sticky; bottom: 0;
+    padding: 14px 22px 20px;
+    background: linear-gradient(to bottom, rgba(246,247,249,0), var(--bg) 30%);
+  }
+  .composer-inner {
+    max-width: 780px; margin: 0 auto;
+    display: flex; gap: 10px; align-items: flex-end;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 8px 8px 8px 14px;
+    box-shadow: 0 4px 18px rgba(17, 24, 39, .05);
+  }
+  .composer-inner:focus-within { border-color: #b9ccff; box-shadow: 0 4px 18px rgba(37, 99, 235, .10); }
+  textarea {
+    flex: 1; border: 0; outline: 0; resize: none;
+    font: inherit; line-height: 1.6; color: var(--text);
+    background: transparent; max-height: 160px; padding: 5px 0;
+  }
+  button.send {
+    border: 0; border-radius: 10px; padding: 9px 16px;
+    background: var(--brand); color: #fff; font: inherit; font-weight: 600;
+    cursor: pointer; flex: 0 0 auto;
+  }
+  button.send:disabled { background: #b9c3d6; cursor: default; }
+  .hint { max-width: 780px; margin: 7px auto 0; font-size: 11px; color: #9ca3af; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #d8dae0; border-radius: 8px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: #c3c6ce; background-clip: content-box; }
+
+  @media (max-width: 760px) {
+    .sidebar { width: 200px; flex-basis: 200px; }
+    .messages, .composer { padding-left: 12px; padding-right: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">M</div>
+      <div>
+        <div class="name">MiniAgent</div>
+        <div class="sub">原生 function calling</div>
+      </div>
+    </div>
+    <button class="new" id="newBtn">新建窗口</button>
+    <div class="list" id="list"></div>
+    <div class="side-foot" id="health">连接中…</div>
+  </aside>
+
+  <main class="main">
+    <header class="top">
+      <div class="title" id="title">新对话</div>
+      <div class="meta" id="meta"></div>
+    </header>
+    <div class="messages" id="messages">
+      <div class="thread" id="thread"></div>
+    </div>
+    <div class="composer">
+      <div class="composer-inner">
+        <textarea id="input" rows="1" placeholder="试试：北京天气怎么样？记一条待办：带伞"></textarea>
+        <button class="send" id="send">发送</button>
+      </div>
+      <div class="hint">Enter 发送，Shift + Enter 换行。每个窗口是一个独立 session。</div>
+    </div>
+  </main>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+// pending: session_id -> 这一轮的用户原话。每个会话各记各的，
+// 所以 A 在等模型返回时，切到 B 仍然能发消息。
+const state = { sid: localStorage.getItem("mini-agent-sid"), pending: new Map(), sessions: [] };
+
+function isBusy(sid) {
+  return state.pending.has(sid);
+}
+
+function syncComposer() {
+  const busy = isBusy(state.sid);
+  $("send").disabled = busy;
+  $("input").placeholder = busy
+    ? "这个对话正在回答…切到别的窗口可以继续发"
+    : "试试：北京天气怎么样？记一条待办：带伞";
+}
+
+function addLoadingBubble() {
+  const bubble = addBot();
+  const loading = el("div", "loading");
+  loading.append(el("i"), el("i"), el("i"));
+  bubble.appendChild(loading);
+  return bubble;
+}
+
+async function api(path, options) {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try { detail = (await res.json()).detail || detail; } catch (_) {}
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+/* ---------------- 渲染工具 ---------------- */
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function scrollBottom() {
+  const box = $("messages");
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearThread() {
+  $("thread").replaceChildren();
+}
+
+function addUser(text) {
+  const row = el("div", "row user");
+  row.appendChild(el("div", "bubble", text));
+  $("thread").appendChild(row);
+}
+
+function addBot() {
+  const row = el("div", "row bot");
+  const bubble = el("div", "bubble");
+  row.appendChild(bubble);
+  $("thread").appendChild(row);
+  return bubble;
+}
+
+function addThought(bubble, text, label) {
+  // 一拍一个框，原样显示模型这一拍写下的 reasoning。
+  // 不做拼接、不去重：模型没写就是没有，不要用别的拍的思考来凑。
+  if (!text || !text.trim()) return null;
+  const details = el("details", "thought");
+  details.appendChild(el("summary", "", label || "思考过程"));
+  details.appendChild(el("div", "tbody", text));
+  bubble.appendChild(details);
+  return details;
+}
+
+function addTool(bubble, step) {
+  // 不再把所有工具塞进同一个盒子：卡片按拍顺序排在对应的思考下面，
+  // 读者才能看出"这一拍想了什么 -> 于是调了谁"。
+  const details = el("details", "tool" + (step.error ? " err" : ""));
+  const summary = el("summary");
+  summary.appendChild(el("span", "dot" + (step.error ? " err" : "")));
+  summary.appendChild(el("span", "tname", step.tool || "?"));
+  summary.appendChild(el("span", "targs", JSON.stringify(step.args || {})));
+  if (step.duration_ms) summary.appendChild(el("span", "tms", step.duration_ms + " ms"));
+  details.appendChild(summary);
+
+  const body = step.error
+    ? "错误：" + step.error
+    : (step.observation || "（无返回内容）");
+  details.appendChild(el("pre", "", body));
+  bubble.appendChild(details);
+}
+
+function addStat(bubble, run) {
+  const parts = [];
+  // 对外展示不写"拍"：这是内部术语（一次模型调用），页面只写"步"
+  if (run.llm_calls) parts.push(run.llm_calls + " 步");
+  if (run.elapsed_ms) parts.push((run.elapsed_ms / 1000).toFixed(1) + "s");
+  if (run.stopped_reason && run.stopped_reason !== "final") parts.push("结束：" + run.stopped_reason);
+  if (!parts.length) return;
+  bubble.appendChild(el("div", "stat", parts.join("  ·  ")));
+}
+
+function collectThoughts(steps) {
+  // 一轮里模型被调用多次，每次各写一段 reasoning。
+  // 这里按 index 取每段（并行调工具时多条 StepRecord 共用一个 index，只取一次），
+  // 顺序保留、原文不改、不去重——只是把它们放进同一个框里，像网页端大模型那样。
+  const order = [];
+  const byIndex = new Map();
+  steps.forEach((s, i) => {
+    const idx = s.index == null ? i + 1 : s.index;
+    if (!byIndex.has(idx)) {
+      byIndex.set(idx, "");
+      order.push(idx);
+    }
+    if (!byIndex.get(idx) && s.thought) byIndex.set(idx, s.thought);
+  });
+  return order.map((idx) => byIndex.get(idx)).filter(Boolean);
+}
+
+function renderRun(run, { skipUser, expand } = {}) {
+  if (!skipUser) addUser(run.input || "");
+  const bubble = addBot();
+  const steps = run.steps || [];
+  const paragraphs = collectThoughts(steps);
+  if (paragraphs.length) {
+    const box = addThought(bubble, paragraphs.join("\n\n"), "思考过程");
+    if (box) box.open = Boolean(expand);
+  }
+  steps.filter((s) => s.tool).forEach((s) => addTool(bubble, s));
+  bubble.appendChild(el("div", "answer", run.answer || "（没有回答）"));
+  addStat(bubble, run);
+  scrollBottom();
+}
+
+function renderMessages(messages) {
+  messages.forEach((m) => {
+    if (m.role === "user") addUser(m.content);
+    else if (m.role === "assistant" && m.content) {
+      const bubble = addBot();
+      if (m.reasoning) addThought(bubble, m.reasoning);
+      bubble.appendChild(el("div", "answer", m.content));
+    }
+  });
+}
+
+function showEmpty() {
+  const wrap = el("div", "empty");
+  wrap.appendChild(el("h1", "", "想让我做点什么？"));
+  wrap.appendChild(el("p", "", "查天气、算数、记待办、搜文档。工具调用和思考过程都会显示在旁边。"));
+  const chips = el("div", "chips");
+  ["北京天气怎么样，记个待办：带伞", "帮我算一下 (17*23)+8", "搜一下 function calling", "我还有哪些待办？"].forEach((text) => {
+    const chip = el("div", "chip", text);
+    chip.onclick = () => {
+      $("input").value = text;
+      send();
+    };
+    chips.appendChild(chip);
+  });
+  wrap.appendChild(chips);
+  $("thread").appendChild(wrap);
+}
+
+/* ---------------- 会话 ---------------- */
+async function loadSessions() {
+  const data = await api("/api/sessions");
+  state.sessions = data.items || [];
+  const list = $("list");
+  list.replaceChildren();
+  state.sessions.forEach((s) => {
+    const item = el("div", "item" + (s.id === state.sid ? " active" : ""));
+    // 跑着的会话服务端还没落库，标题是空的：先用本地这句待发的原话顶上
+    const pendingText = state.pending.get(s.id);
+    const title = pendingText && (!s.title || s.title === "(空会话)") ? pendingText : s.title || "(空会话)";
+    item.appendChild(el("div", "t", title));
+    const when = new Date(s.updated_at * 1000).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+    // 正在跑的那一条要能看出来，否则会以为消息丢了
+    item.appendChild(el("div", "s" + (isBusy(s.id) ? " busy" : ""), isBusy(s.id) ? `${s.turns} 轮 · 回答中…` : `${s.turns} 轮 · ${when}`));
+    item.onclick = () => openSession(s.id);
+    list.appendChild(item);
+  });
+}
+
+async function newSession() {
+  const data = await api("/api/sessions", { method: "POST" });
+  state.sid = data.id;
+  localStorage.setItem("mini-agent-sid", data.id);
+  clearThread();
+  showEmpty();
+  $("title").textContent = "新对话";
+  $("meta").textContent = "";
+  syncComposer();
+  await loadSessions();
+  $("input").focus();
+}
+
+async function openSession(id) {
+  const data = await api("/api/sessions/" + encodeURIComponent(id));
+  state.sid = id;
+  localStorage.setItem("mini-agent-sid", id);
+  clearThread();
+  $("title").textContent = data.title || "新对话";
+  $("meta").textContent = (data.turns || 0) + " 轮";
+
+  if (data.runs && data.runs.length) {
+    data.runs.forEach((run, i) => renderRun(run, { expand: i === data.runs.length - 1 }));
+  } else if (data.messages && data.messages.length) {
+    renderMessages(data.messages);
+  } else if (!isBusy(id)) {
+    showEmpty();
+  }
+  // 这个会话还有一轮没跑完：把提问和加载动画补上，别让人以为没反应
+  if (isBusy(id)) {
+    addUser(state.pending.get(id));
+    addLoadingBubble();
+  }
+  syncComposer();
+  scrollBottom();
+  await loadSessions();
+}
+
+/* ---------------- 发送 ---------------- */
+function autoGrow() {
+  const t = $("input");
+  t.style.height = "auto";
+  t.style.height = Math.min(t.scrollHeight, 160) + "px";
+}
+
+async function send() {
+  const text = $("input").value.trim();
+  if (!text) return;
+  if (!state.sid) await newSession();
+
+  // 锁在"开会话"这一层：同一个会话仍然一次只跑一条（后端也会排队，
+  // 但抢锁顺序不保证，可能落库成 user/user 倒序）；不同会话互不影响。
+  const sid = state.sid;
+  if (isBusy(sid)) return;
+
+  state.pending.set(sid, text);
+  syncComposer();
+  $("input").value = "";
+  autoGrow();
+  // 新窗口的空状态卡片要收掉，否则第一条消息会排在"想让我做点什么"下面
+  const emptyBlock = $("thread").querySelector(".empty");
+  if (emptyBlock) emptyBlock.remove();
+  addUser(text);
+
+  const bubble = addLoadingBubble();
+  scrollBottom();
+  await loadSessions(); // 侧栏标出"回答中…"
+
+  let needsReload = false;
+  try {
+    const run = await api("/api/chat", {
+      method: "POST",
+      body: JSON.stringify({ session_id: sid, message: text }),
+    });
+    // 只画"当前正在看的那个会话"。已经切走就不碰 DOM ——
+    // 数据已经落库，切回来 openSession() 会重新拉，照样能看到。
+    if (state.sid === sid) {
+      if (bubble.isConnected) {
+        bubble.parentElement.remove();
+        renderRun(run, { skipUser: true, expand: true });
+        $("meta").textContent = (parseInt($("meta").textContent) || 0) + 1 + " 轮";
+      } else {
+        // 中途切走又切回来过：整屏重拉，别往已经被清掉的节点上写。
+        // 必须等下面 finally 清掉 pending 再拉，否则重拉时还以为"仍在回答"，
+        // 又会补一个加载动画，答案就永远不出来了。
+        needsReload = true;
+      }
+    }
+  } catch (err) {
+    if (state.sid === sid && bubble.isConnected) {
+      bubble.replaceChildren(el("div", "answer", "请求失败：" + err.message));
+    }
+  } finally {
+    state.pending.delete(sid);
+    syncComposer();
+    if (state.sid === sid) $("input").focus();
+    await loadSessions();
+  }
+  if (needsReload && state.sid === sid) await openSession(sid);
+}
+
+/* ---------------- 启动 ---------------- */
+async function boot() {
+  // 支持 ?s=<session_id> 直达某个窗口，方便刷新/分享
+  const target = new URLSearchParams(location.search).get("s");
+  if (target) state.sid = target;
+  try {
+    const health = await api("/api/health");
+    $("health").textContent = `${health.model} · ${health.fake ? "剧本" : "真实 API"} · 上限 ${health.max_steps} 拍`;
+  } catch (err) {
+    $("health").textContent = "后端未连接";
+  }
+  await loadSessions();
+  if (state.sid && state.sessions.some((s) => s.id === state.sid)) {
+    try { await openSession(state.sid); return; } catch (_) {}
+  }
+  await newSession();
+}
+
+$("send").onclick = send;
+$("newBtn").onclick = newSession;
+$("input").addEventListener("input", autoGrow);
+$("input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
+});
+boot();
+</script>
+</body>
+</html>
